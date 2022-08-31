@@ -50,6 +50,11 @@ struct ARROW_EXPORT ParseOptions {
   char quote_char = '"';
   /// Whether a quote inside a value is double-quoted
   bool double_quote = true;
+  /// Starting and ending character of array or dictionary
+  char array_start = '[';
+  char dict_start = '{';
+  char array_end = ']';
+  char dict_end = '}';
   /// Whether escaping is used
   bool escaping = false;
   /// Escaping character (if `escaping` is true)
