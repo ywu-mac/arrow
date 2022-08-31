@@ -27,6 +27,7 @@
 #include <memory>
 #include <string>
 #include <type_traits>
+#include <map>
 
 #include "arrow/type.h"
 #include "arrow/type_traits.h"
@@ -640,6 +641,60 @@ static inline bool ParseSubSeconds(const char* s, size_t length, TimeUnit::type 
 }
 
 }  // namespace detail
+
+bool ParseDict(const char* s, size_t length, std::map<std::string , std::string>* out) {
+  if (s[0] != '{') return false;
+  if (s[length] != '}') return false;
+
+  int i, keybegin, colon;
+  std::string key, ans;
+  i = 1;
+  keybegin = 1;
+
+  while (i < length) {
+    if (s[i] == ':') {
+      //empty key
+      if (keybegin == i){
+        return false;
+      }
+      colon = i;
+      key.assign(s+keybegin, (colon-keybegin));
+    }
+    if (s[i] == ',') {
+      //empty ans
+      if((colon+1)==i){
+        return false;
+      }
+      ans.assign(s+colon, (i-colon-1));
+      out->insert(std::pair<std::string,std::string>(key,ans));
+      keybegin = i+1;
+    }
+    i++;
+  }
+
+  return true;
+}
+
+bool ParseArray(const char* s, size_t length, std::vector<std::string>* out) {
+  if (s[0] != '[') return false;
+  if (s[length] != ']') return false;
+
+  int itembegin, i;
+  i = 1;
+  itembegin = 1;
+
+  while (i < length) {
+    if (s[i] == ',') {
+      //empty item
+      if(i==itembegin){return false;}
+      std::string item(s + itembegin, (i - itembegin));
+      out->push_back(item);
+      itembegin = i + 1;
+    }
+    i++;
+  }
+  return true;
+}
 
 static inline bool ParseTimestampISO8601(const char* s, size_t length,
                                          TimeUnit::type unit, TimestampType::c_type* out,
