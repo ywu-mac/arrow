@@ -286,10 +286,18 @@ class BlockParserImpl {
       ++data;
       values_writer->StartField(true /* quoted */);
       goto InQuotedField;
-    } else {
-      values_writer->StartField(false /* quoted */);
-      goto InField;
     }
+    // "[" and "{" at start of field are identifier for arrays or dictionaries
+    if(ARROW_PREDICT_FALSE(*data == options_.array_start)) {
+        values_writer->StartField(false);
+        goto InArrayField;
+    }
+    if (ARROW_PREDICT_FALSE(*data == options_.dict_start)) {
+        values_writer->StartField(false);
+        goto InDictField;
+    }
+    values_writer->StartField(false /* quoted */);
+    goto InField;
 
   InField:
     // Inside a non-quoted part of a field
@@ -372,6 +380,72 @@ class BlockParserImpl {
     }
     parsed_writer->PushFieldChar(c);
     goto InQuotedField;
+              
+  InDictField:
+    // Inside a dictionary
+    if (UseBulkFilter) {
+      const char* bulk_end = RunBulkFilter(parsed_writer, data, data_end, bulk_filter);
+      if (ARROW_PREDICT_FALSE(bulk_end == nullptr)) {
+        if (is_final) {
+          data = data_end;
+        }
+        goto AbortLine;
+      }
+      data = bulk_end;
+    } else {
+      if (ARROW_PREDICT_FALSE(data == data_end)) {
+        goto AbortLine;
+      }
+    }
+    c = *data++;
+    if (SpecializedOptions::escaping && ARROW_PREDICT_FALSE(c == options_.escape_char)) {
+      if (ARROW_PREDICT_FALSE(data == data_end)) {
+        goto AbortLine;
+      }
+      c = *data++;
+      parsed_writer->PushFieldChar(c);
+      goto InDictField;
+    }
+    if (ARROW_PREDICT_FALSE(c == options_.dict_end)) {
+      parsed_writer->PushFieldChar(c);
+      // End of dictionary
+      goto InField;
+    }
+    parsed_writer->PushFieldChar(c);
+    goto InDictField;
+
+  InArrayField:
+    // Inside an array
+    if (UseBulkFilter) {
+      const char* bulk_end = RunBulkFilter(parsed_writer, data, data_end, bulk_filter);
+      if (ARROW_PREDICT_FALSE(bulk_end == nullptr)) {
+        if (is_final) {
+          data = data_end;
+        }
+        goto AbortLine;
+      }
+      data = bulk_end;
+    } else {
+      if (ARROW_PREDICT_FALSE(data == data_end)) {
+        goto AbortLine;
+      }
+    }
+    c = *data++;
+    if (SpecializedOptions::escaping && ARROW_PREDICT_FALSE(c == options_.escape_char)) {
+      if (ARROW_PREDICT_FALSE(data == data_end)) {
+        goto AbortLine;
+      }
+      c = *data++;
+      parsed_writer->PushFieldChar(c);
+      goto InArrayField;
+    }
+    if (ARROW_PREDICT_FALSE(c == options_.array_end)) {
+      parsed_writer->PushFieldChar(c);
+      // End of array
+      goto InField;
+    }
+    parsed_writer->PushFieldChar(c);
+    goto InArrayField;
 
   FieldEnd:
     // At the end of a field
